@@ -25,25 +25,8 @@
 		this.ctx = context;
 
 		//Variables global to the chart
-		var computeDimension = function(element,dimension)
-		{
-			if (element['offset'+dimension])
-			{
-				return element['offset'+dimension];
-			}
-			else
-			{
-				return document.defaultView.getComputedStyle(element).getPropertyValue(dimension);
-			}
-		}
-
-		var width = this.width = computeDimension(context.canvas,'Width');
-		var height = this.height = computeDimension(context.canvas,'Height');
-
-		// Firefox requires this to work correctly
-		context.canvas.width  = width;
-		context.canvas.height = height;
-
+		var width = this.width = context.canvas.width;
+		var height = this.height = context.canvas.height;
 		this.aspectRatio = this.width / this.height;
 		//High pixel density displays - multiply the size of the canvas height/width by the device pixel ratio, then scale.
 		helpers.retinaScale(this);
@@ -84,6 +67,9 @@
 
 			// Boolean - Whether to show labels on the scale
 			scaleShowLabels: true,
+
+			// Boolean or a positive integer denoting number of labels to be shown on x axis
+			showXLabels: true,
 
 			// Interpolated JS string - can access value
 			scaleLabel: "<%=value%>",
@@ -662,26 +648,26 @@
 			}
 		},
 		//Request animation polyfill - http://www.paulirish.com/2011/requestanimationframe-for-smart-animating/
-		requestAnimFrame = helpers.requestAnimFrame = (function(){
+		requestAnimFrame = helpers.requestAnimFrame = (function(window){
 			return window.requestAnimationFrame ||
 				window.webkitRequestAnimationFrame ||
 				window.mozRequestAnimationFrame ||
 				window.oRequestAnimationFrame ||
 				window.msRequestAnimationFrame ||
 				function(callback) {
-					return window.setTimeout(callback, 1000 / 60);
+					return setTimeout(callback, 1000 / 60);
 				};
-		})(),
-		cancelAnimFrame = helpers.cancelAnimFrame = (function(){
+		})(root),
+		cancelAnimFrame = helpers.cancelAnimFrame = (function(window){
 			return window.cancelAnimationFrame ||
 				window.webkitCancelAnimationFrame ||
 				window.mozCancelAnimationFrame ||
 				window.oCancelAnimationFrame ||
 				window.msCancelAnimationFrame ||
 				function(callback) {
-					return window.clearTimeout(callback, 1000 / 60);
+					return clearTimeout(callback, 1000 / 60);
 				};
-		})(),
+		})(root),
 		animationLoop = helpers.animationLoop = function(callback,totalSteps,easingString,onProgress,onComplete,chartInstance){
 
 			var currentStep = 0,
@@ -842,7 +828,7 @@
 		},
 		stop : function(){
 			// Stops any current animation loop occuring
-			helpers.cancelAnimFrame.call(root, this.animationFrame);
+			helpers.cancelAnimFrame(this.animationFrame);
 			return this;
 		},
 		resize : function(callback){
@@ -1661,6 +1647,9 @@
 
 				},this);
 
+				// if showXLabels is a number then divide and determine how many xLabels to skip before showing next label
+				// else, if showXLabels is true, print all labels, else never print
+				this.xLabelsSkipper = isNumber(this.showXLabels) ? Math.ceil(this.xLabels.length/this.showXLabels) : (this.showXLabels === true) ? 1 : this.xLabels.length+1;
 				each(this.xLabels,function(label,index){
 					var xPos = this.calculateX(index) + aliasPixel(this.lineWidth),
 						// Check to see if line/bar here and decide where to place the line
@@ -1700,19 +1689,23 @@
 
 
 					// Small lines at the bottom of the base grid line
-					ctx.beginPath();
-					ctx.moveTo(linePos,this.endPoint);
-					ctx.lineTo(linePos,this.endPoint + 5);
-					ctx.stroke();
-					ctx.closePath();
-
+					if(index % this.xLabelsSkipper === 0) {
+						//X axis ticks only painted for number of selected x values
+						ctx.beginPath();
+						ctx.moveTo(linePos,this.endPoint);
+						ctx.lineTo(linePos,this.endPoint + 5);
+						ctx.stroke();
+						ctx.closePath();
+					}
 					ctx.save();
 					ctx.translate(xPos,(isRotated) ? this.endPoint + 12 : this.endPoint + 8);
 					ctx.rotate(toRadians(this.xLabelRotation)*-1);
 					ctx.font = this.font;
 					ctx.textAlign = (isRotated) ? "right" : "center";
 					ctx.textBaseline = (isRotated) ? "middle" : "top";
-					ctx.fillText(label, 0, 0);
+					if(index % this.xLabelsSkipper === 0) {
+						ctx.fillText(label, 0, 0);
+					}
 					ctx.restore();
 				},this);
 
@@ -1984,22 +1977,24 @@
 	});
 
 	// Attach global event to resize each chart instance when the browser resizes
-	helpers.addEvent(window, "resize", (function(){
-		// Basic debounce of resize function so it doesn't hurt performance when resizing browser.
-		var timeout;
-		return function(){
-			clearTimeout(timeout);
-			timeout = setTimeout(function(){
-				each(Chart.instances,function(instance){
-					// If the responsive flag is set in the chart instance config
-					// Cascade the resize event down to the chart.
-					if (instance.options.responsive){
-						instance.resize(instance.render, true);
-					}
-				});
-			}, 50);
-		};
-	})());
+	if (typeof window !== 'undefined') {
+		helpers.addEvent(window, "resize", (function(){
+			// Basic debounce of resize function so it doesn't hurt performance when resizing browser.
+			var timeout;
+			return function(){
+				clearTimeout(timeout);
+				timeout = setTimeout(function(){
+					each(Chart.instances,function(instance){
+						// If the responsive flag is set in the chart instance config
+						// Cascade the resize event down to the chart.
+						if (instance.options.responsive){
+							instance.resize(instance.render, true);
+						}
+					});
+				}, 50);
+			};
+		})());
+	}
 
 
 	if (amd) {
@@ -2229,6 +2224,7 @@
 					);
 					helpers.extend(this, updatedRanges);
 				},
+				showXLabels: (this.options.showXLabels) ? this.options.showXLabels : true,
 				xLabels : labels,
 				font : helpers.fontString(this.options.scaleFontSize, this.options.scaleFontStyle, this.options.scaleFontFamily),
 				lineWidth : this.options.scaleLineWidth,
@@ -2700,6 +2696,7 @@
 					);
 					helpers.extend(this, updatedRanges);
 				},
+				showXLabels: (this.options.showXLabels) ? this.options.showXLabels : true,
 				xLabels : labels,
 				font : helpers.fontString(this.options.scaleFontSize, this.options.scaleFontStyle, this.options.scaleFontFamily),
 				lineWidth : this.options.scaleLineWidth,
@@ -3078,6 +3075,8 @@
 			helpers.each(this.segments,function(segment){
 				segment.save();
 			});
+			
+			this.reflow();
 			this.render();
 		},
 		reflow : function(){
