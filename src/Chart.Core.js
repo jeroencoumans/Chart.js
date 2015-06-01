@@ -648,26 +648,26 @@
 			}
 		},
 		//Request animation polyfill - http://www.paulirish.com/2011/requestanimationframe-for-smart-animating/
-		requestAnimFrame = helpers.requestAnimFrame = (function(){
+		requestAnimFrame = helpers.requestAnimFrame = (function(window){
 			return window.requestAnimationFrame ||
 				window.webkitRequestAnimationFrame ||
 				window.mozRequestAnimationFrame ||
 				window.oRequestAnimationFrame ||
 				window.msRequestAnimationFrame ||
 				function(callback) {
-					return window.setTimeout(callback, 1000 / 60);
+					return setTimeout(callback, 1000 / 60);
 				};
-		})(),
-		cancelAnimFrame = helpers.cancelAnimFrame = (function(){
+		})(root),
+		cancelAnimFrame = helpers.cancelAnimFrame = (function(window){
 			return window.cancelAnimationFrame ||
 				window.webkitCancelAnimationFrame ||
 				window.mozCancelAnimationFrame ||
 				window.oCancelAnimationFrame ||
 				window.msCancelAnimationFrame ||
 				function(callback) {
-					return window.clearTimeout(callback, 1000 / 60);
+					return clearTimeout(callback, 1000 / 60);
 				};
-		})(),
+		})(root),
 		animationLoop = helpers.animationLoop = function(callback,totalSteps,easingString,onProgress,onComplete,chartInstance){
 
 			var currentStep = 0,
@@ -1977,22 +1977,24 @@
 	});
 
 	// Attach global event to resize each chart instance when the browser resizes
-	helpers.addEvent(window, "resize", (function(){
-		// Basic debounce of resize function so it doesn't hurt performance when resizing browser.
-		var timeout;
-		return function(){
-			clearTimeout(timeout);
-			timeout = setTimeout(function(){
-				each(Chart.instances,function(instance){
-					// If the responsive flag is set in the chart instance config
-					// Cascade the resize event down to the chart.
-					if (instance.options.responsive){
-						instance.resize(instance.render, true);
-					}
-				});
-			}, 50);
-		};
-	})());
+	if (typeof window !== 'undefined') {
+		helpers.addEvent(window, "resize", (function(){
+			// Basic debounce of resize function so it doesn't hurt performance when resizing browser.
+			var timeout;
+			return function(){
+				clearTimeout(timeout);
+				timeout = setTimeout(function(){
+					each(Chart.instances,function(instance){
+						// If the responsive flag is set in the chart instance config
+						// Cascade the resize event down to the chart.
+						if (instance.options.responsive){
+							instance.resize(instance.render, true);
+						}
+					});
+				}, 50);
+			};
+		})());
+	}
 
 
 	if (amd) {
